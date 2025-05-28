@@ -1,1 +1,82 @@
+// Express.js backend for SmartJal
+
+const express = require('express');
+const multer = require('multer');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+const PORT = 5000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// MongoDB setup
+mongoose.connect('mongodb://127.0.0.1:27017/smartjal', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
+
+const reportSchema = new mongoose.Schema({
+  description: String,
+  issueType: String,
+  imagePath: String,
+  latitude: Number,
+  longitude: Number,
+  timestamp: { type: Date, default: Date.now },
+  status: { type: String, default: 'Open' }
+});
+
+const Report = mongoose.model('Report', reportSchema);
+
+// Image upload config
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = './uploads';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// POST route to accept reports
+app.post('/report', upload.single('image'), async (req, res) => {
+  try {
+    const { description, issueType, latitude, longitude } = req.body;
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : '';
+
+    const report = new Report({
+      description,
+      issueType,
+      latitude,
+      longitude,
+      imagePath
+    });
+
+    await report.save();
+    res.status(200).json({ message: 'Report submitted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to submit report' });
+  }
+});
+
+// GET route to fetch all reports
+app.get('/reports', async (req, res) => {
+  try {
+    const reports = await Report.find().sort({ timestamp: -1 });
+    res.json(reports);
+  } catch (err) {
+    res.status(500).json({ error: 'Error fetching reports' });
+  }
+});
+
+app.listen(PORT, () => console.log(`SmartJal server running on port ${PORT}`));
 
